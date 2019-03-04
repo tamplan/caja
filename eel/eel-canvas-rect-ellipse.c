@@ -48,30 +48,42 @@ enum
     PROP_Y2,
     PROP_FILL_COLOR_RGBA,
     PROP_OUTLINE_COLOR_RGBA,
-	PROP_OUTLINE_STIPPLING,
+    PROP_OUTLINE_STIPPLING,
     PROP_WIDTH_PIXELS,
     PROP_WIDTH_UNITS
 };
 
 
-static void eel_canvas_re_class_init (EelCanvasREClass *klass);
-static void eel_canvas_re_init       (EelCanvasRE      *re);
-static void eel_canvas_re_set_property (GObject              *object,
-                                        guint                 param_id,
-                                        const GValue         *value,
-                                        GParamSpec           *pspec);
-static void eel_canvas_re_get_property (GObject              *object,
-                                        guint                 param_id,
-                                        GValue               *value,
-                                        GParamSpec           *pspec);
-
-static void eel_canvas_re_update_shared (EelCanvasItem *item,
-        double i2w_dx, double i2w_dy, int flags);
-static void eel_canvas_re_realize     (EelCanvasItem *item);
-static void eel_canvas_re_unrealize   (EelCanvasItem *item);
-static void eel_canvas_re_bounds      (EelCanvasItem *item, double *x1, double *y1, double *x2, double *y2);
-static void eel_canvas_re_translate   (EelCanvasItem *item, double dx, double dy);
-static void eel_canvas_rect_update      (EelCanvasItem *item, double i2w_dx, double i2w_dy, int flags);
+static void eel_canvas_re_class_init    (EelCanvasREClass  *klass,
+                                         void              *klass_data);
+static void eel_canvas_re_init          (EelCanvasRE       *re,
+                                         void              *re_data);
+static void eel_canvas_re_set_property  (GObject           *object,
+                                         guint             param_id,
+                                         const GValue      *value,
+                                         GParamSpec        *pspec);
+static void eel_canvas_re_get_property  (GObject           *object,
+                                         guint             param_id,
+                                         GValue            *value,
+                                         GParamSpec        *pspec);
+static void eel_canvas_re_update_shared (EelCanvasItem     *item,
+                                         double            i2w_dx,
+                                         double            i2w_dy,
+                                         int               flags);
+static void eel_canvas_re_realize       (EelCanvasItem     *item);
+static void eel_canvas_re_unrealize     (EelCanvasItem     *item);
+static void eel_canvas_re_bounds        (EelCanvasItem     *item,
+                                         double            *x1,
+                                         double            *y1,
+                                         double            *x2,
+                                         double            *y2);
+static void eel_canvas_re_translate     (EelCanvasItem     *item,
+                                         double            dx,
+                                         double            dy);
+static void eel_canvas_rect_update      (EelCanvasItem     *item,
+                                         double            i2w_dx,
+                                         double            i2w_dy,
+                                         int               flags);
 
 typedef struct
 {
@@ -96,14 +108,14 @@ eel_canvas_re_get_type (void)
         GTypeInfo re_info =
         {
             sizeof (EelCanvasREClass),
-            (GBaseInitFunc) NULL,
-            (GBaseFinalizeFunc) NULL,
-            (GClassInitFunc) eel_canvas_re_class_init,
-            NULL,           /* class_finalize */
-            NULL,           /* class_data */
+            NULL,                                      /* base_init */
+            NULL,                                      /* base_finalize */
+            (GClassInitFunc) eel_canvas_re_class_init, /* class_init */
+            NULL,                                      /* class_finalize */
+            NULL,                                      /* class_data */
             sizeof (EelCanvasRE),
-            0,              /* n_preallocs */
-            (GInstanceInitFunc) eel_canvas_re_init
+            0,                                         /* n_preallocs */
+            (GInstanceInitFunc) eel_canvas_re_init     /* instance_init */
         };
 
         re_type = g_type_register_static (eel_canvas_item_get_type (),
@@ -116,13 +128,11 @@ eel_canvas_re_get_type (void)
 }
 
 static void
-eel_canvas_re_class_init (EelCanvasREClass *klass)
+eel_canvas_re_class_init (EelCanvasREClass *klass,
+                          void             *klass_data)
 {
-    GObjectClass *gobject_class;
-    EelCanvasItemClass *item_class;
-
-    gobject_class = (GObjectClass *) klass;
-    item_class = (EelCanvasItemClass *) klass;
+    GObjectClass *gobject_class    = G_OBJECT_CLASS (klass);
+    EelCanvasItemClass *item_class = EEL_CANVAS_ITEM_CLASS (klass);
 
     re_parent_class = g_type_class_peek_parent (klass);
 
@@ -130,60 +140,142 @@ eel_canvas_re_class_init (EelCanvasREClass *klass)
     gobject_class->get_property = eel_canvas_re_get_property;
 
     g_object_class_install_property
-    (gobject_class,
-     PROP_X1,
-     g_param_spec_double ("x1", NULL, NULL,
-                          -G_MAXDOUBLE, G_MAXDOUBLE, 0,
-                          G_PARAM_READWRITE));
-    g_object_class_install_property
-    (gobject_class,
-     PROP_Y1,
-     g_param_spec_double ("y1", NULL, NULL,
-                          -G_MAXDOUBLE, G_MAXDOUBLE, 0,
-                          G_PARAM_READWRITE));
-    g_object_class_install_property
-    (gobject_class,
-     PROP_X2,
-     g_param_spec_double ("x2", NULL, NULL,
-                          -G_MAXDOUBLE, G_MAXDOUBLE, 0,
-                          G_PARAM_READWRITE));
-    g_object_class_install_property
-    (gobject_class,
-     PROP_Y2,
-     g_param_spec_double ("y2", NULL, NULL,
-                          -G_MAXDOUBLE, G_MAXDOUBLE, 0,
-                          G_PARAM_READWRITE));
-    g_object_class_install_property
-    (gobject_class,
-     PROP_FILL_COLOR_RGBA,
-     g_param_spec_boxed ("fill-color-rgba", NULL, NULL,
-                         GDK_TYPE_RGBA,
+    (
+        gobject_class,
+        PROP_X1,              /* property id */
+        g_param_spec_double   /* property type */
+        (
+            "x1",             /* property name */
+            NULL,             /* nickname */
+            NULL,             /* description */
+            -G_MAXDOUBLE,     /* minimum */
+            G_MAXDOUBLE,      /* maximum */
+            0.0,              /* default */
+            G_PARAM_READWRITE /* GParamSpecFlags */
+        )
+    );
 
-                         G_PARAM_READWRITE));
     g_object_class_install_property
-    (gobject_class,
-     PROP_OUTLINE_COLOR_RGBA,
-     g_param_spec_boxed ("outline-color-rgba", NULL, NULL,
-                         GDK_TYPE_RGBA,
-                         G_PARAM_READWRITE));
+    (
+        gobject_class,
+        PROP_Y1,               /* property id */
+        g_param_spec_double    /* property type */
+        (
+            "y1",              /* property name */
+            NULL,              /* nickname */
+            NULL,              /* description */
+            -G_MAXDOUBLE,      /* minimum */
+            G_MAXDOUBLE,       /* maximum */
+            0.0,               /* default */
+            G_PARAM_READWRITE  /* GParamSpecFlags */
+        )
+    );
 
-	g_object_class_install_property
-		(gobject_class,
-		 PROP_OUTLINE_STIPPLING,
-		 g_param_spec_boolean ("outline-stippling", NULL, NULL,
-				       FALSE, G_PARAM_READWRITE));
     g_object_class_install_property
-    (gobject_class,
-     PROP_WIDTH_PIXELS,
-     g_param_spec_uint ("width-pixels", NULL, NULL,
-                        0, G_MAXUINT, 0,
-                        G_PARAM_READWRITE));
+    (
+        gobject_class,
+        PROP_X2,               /* property id */
+        g_param_spec_double    /* property type */
+        (
+            "x2",              /* property name */
+            NULL,              /* nickname */
+            NULL,              /* description */
+            -G_MAXDOUBLE,      /* minimum */
+            G_MAXDOUBLE,       /* maximum */
+            0.0,               /* default */
+            G_PARAM_READWRITE  /* GParamSpecFlags */
+         )
+    );
+
     g_object_class_install_property
-    (gobject_class,
-     PROP_WIDTH_UNITS,
-     g_param_spec_double ("width-units", NULL, NULL,
-                          0.0, G_MAXDOUBLE, 0.0,
-                          G_PARAM_READWRITE));
+    (
+        gobject_class,
+        PROP_Y2,               /* property id */
+        g_param_spec_double    /* property type */
+        (
+            "y2",              /* property name */
+            NULL,              /* nickname */
+            NULL,              /* description */
+            -G_MAXDOUBLE,      /* minimum */
+            G_MAXDOUBLE,       /* maximum */
+            0.0,               /* default */
+            G_PARAM_READWRITE  /* GParamSpecFlags */
+        )
+    );
+
+    g_object_class_install_property
+    (
+        gobject_class,
+        PROP_FILL_COLOR_RGBA,   /* property id */
+        g_param_spec_boxed      /* property type */
+        (
+            "fill-color-rgba",  /* property name */
+            NULL,               /* nickname */
+            NULL,               /* description */
+            GDK_TYPE_RGBA,
+            G_PARAM_READWRITE   /* GParamSpecFlags */
+        )
+    );
+
+    g_object_class_install_property
+    (
+        gobject_class,
+        PROP_OUTLINE_COLOR_RGBA,  /* property id */
+        g_param_spec_boxed        /* property type */
+        (
+            "outline-color-rgba", /* property name */
+            NULL,                 /* nickname */
+            NULL,                 /* description */
+            GDK_TYPE_RGBA,
+            G_PARAM_READWRITE     /* GParamSpecFlags */
+        )
+    );
+
+    g_object_class_install_property
+    (
+        gobject_class,
+        PROP_OUTLINE_STIPPLING,  /* property id */
+        g_param_spec_boolean     /* property type */
+        (
+            "outline-stippling", /* property name */
+            NULL,                /* nickname */
+            NULL,                /* description */
+            FALSE,               /* default */
+            G_PARAM_READWRITE    /* GParamSpecFlags */
+        )
+    );
+
+    g_object_class_install_property
+    (
+        gobject_class,
+        PROP_WIDTH_PIXELS,       /* property id */
+        g_param_spec_uint        /* property type */
+        (
+            "width-pixels",      /* property name */
+            NULL,                /* nickname */
+            NULL,                /* description */
+            0,                   /* minimum */
+            G_MAXUINT,           /* maximum */
+            0,                   /* default */
+            G_PARAM_READWRITE    /* GParamSpecFlags */
+         )
+    );
+
+    g_object_class_install_property
+    (
+         gobject_class,
+         PROP_WIDTH_UNITS,       /* property id */
+         g_param_spec_double     /* property type */
+         (
+             "width-units",      /* property name */
+             NULL,               /* nickname */
+             NULL,               /* description */
+             0.0,                /* minimum */
+             G_MAXDOUBLE,        /* maximum */
+             0.0,                /* default */
+             G_PARAM_READWRITE   /* GParamSpecFlags */
+          )
+    );
 
     item_class->realize = eel_canvas_re_realize;
     item_class->unrealize = eel_canvas_re_unrealize;
@@ -192,7 +284,8 @@ eel_canvas_re_class_init (EelCanvasREClass *klass)
 }
 
 static void
-eel_canvas_re_init (EelCanvasRE *re)
+eel_canvas_re_init (EelCanvasRE *re,
+                    void        *re_data)
 {
     re->x1 = 0.0;
     re->y1 = 0.0;
@@ -266,14 +359,11 @@ eel_canvas_re_set_property (GObject              *object,
                             const GValue         *value,
                             GParamSpec           *pspec)
 {
-    EelCanvasItem *item;
-    EelCanvasRE *re;
-
     g_return_if_fail (object != NULL);
     g_return_if_fail (EEL_IS_CANVAS_RE (object));
 
-    item = EEL_CANVAS_ITEM (object);
-    re = EEL_CANVAS_RE (object);
+    EelCanvasItem *item = EEL_CANVAS_ITEM (object);
+    EelCanvasRE *re = EEL_CANVAS_RE (object);
 
     switch (param_id)
     {
@@ -302,9 +392,7 @@ eel_canvas_re_set_property (GObject              *object,
         break;
 
     case PROP_FILL_COLOR_RGBA: {
-            GdkRGBA *color;
-
-            color = g_value_get_boxed (value);
+            GdkRGBA *color = g_value_get_boxed (value);
 
             eel_canvas_re_set_fill (re, color != NULL);
 
@@ -317,9 +405,7 @@ eel_canvas_re_set_property (GObject              *object,
     }
 
     case PROP_OUTLINE_COLOR_RGBA: {
-            GdkRGBA *color;
-
-            color = g_value_get_boxed (value);
+            GdkRGBA *color = g_value_get_boxed (value);
 
             eel_canvas_re_set_outline (re, color != NULL);
 
@@ -331,11 +417,11 @@ eel_canvas_re_set_property (GObject              *object,
         break;
     }
 
-	case PROP_OUTLINE_STIPPLING:
-		re->outline_stippling = g_value_get_boolean (value);
+    case PROP_OUTLINE_STIPPLING:
+        re->outline_stippling = g_value_get_boolean (value);
 
-		eel_canvas_item_request_redraw (item);
-		break;
+        eel_canvas_item_request_redraw (item);
+        break;
 
     case PROP_WIDTH_PIXELS:
         re->width = g_value_get_uint (value);
@@ -363,12 +449,10 @@ eel_canvas_re_get_property (GObject              *object,
                             GValue               *value,
                             GParamSpec           *pspec)
 {
-    EelCanvasRE *re;
-
     g_return_if_fail (object != NULL);
     g_return_if_fail (EEL_IS_CANVAS_RE (object));
 
-    re = EEL_CANVAS_RE (object);
+    EelCanvasRE *re = EEL_CANVAS_RE (object);
 
     switch (param_id)
     {
@@ -396,9 +480,9 @@ eel_canvas_re_get_property (GObject              *object,
         g_value_set_boxed (value,  &re->outline_color);
         break;
 
-	case PROP_OUTLINE_STIPPLING:
-		g_value_set_boolean (value, re->outline_stippling);
-		break;
+    case PROP_OUTLINE_STIPPLING:
+        g_value_set_boolean (value, re->outline_stippling);
+        break;
 
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID (object, param_id, pspec);
@@ -453,13 +537,13 @@ eel_canvas_re_translate (EelCanvasItem *item, double dx, double dy)
 static void
 eel_canvas_re_bounds (EelCanvasItem *item, double *x1, double *y1, double *x2, double *y2)
 {
-    EelCanvasRE *re;
     double hwidth;
 
 #ifdef VERBOSE
     g_print ("eel_canvas_re_bounds\n");
 #endif
-    re = EEL_CANVAS_RE (item);
+
+    EelCanvasRE *re = EEL_CANVAS_RE (item);
 
     if (re->width_pixels)
         hwidth = (re->width / item->canvas->pixels_per_unit) / 2.0;
@@ -475,9 +559,11 @@ eel_canvas_re_bounds (EelCanvasItem *item, double *x1, double *y1, double *x2, d
 /* Rectangle item */
 
 
-static void eel_canvas_rect_class_init (EelCanvasRectClass *klass);
-static void eel_canvas_rect_init (EelCanvasRect *rect);
-static void eel_canvas_rect_finalize (GObject *object);
+static void eel_canvas_rect_class_init (EelCanvasRectClass *klass,
+                                        void               *klass_data);
+static void eel_canvas_rect_init       (EelCanvasRect      *rect,
+                                        void               *rect_data);
+static void eel_canvas_rect_finalize   (GObject            *object);
 
 static void   eel_canvas_rect_draw   (EelCanvasItem *item, cairo_t *cr, cairo_region_t *region);
 
@@ -501,14 +587,14 @@ eel_canvas_rect_get_type (void)
         GTypeInfo rect_info =
         {
             sizeof (EelCanvasRectClass),
-            (GBaseInitFunc) NULL,
-            (GBaseFinalizeFunc) NULL,
-            (GClassInitFunc) eel_canvas_rect_class_init,
-            NULL,           /* class_finalize */
-            NULL,           /* class_data */
+            NULL,                                        /* base_init */
+            NULL,                                        /* base_finalize */
+            (GClassInitFunc) eel_canvas_rect_class_init, /* class_init */
+            NULL,                                        /* class_finalize */
+            NULL,                                        /* class_data */
             sizeof (EelCanvasRect),
-            0,              /* n_preallocs */
-            (GInstanceInitFunc) eel_canvas_rect_init
+            0,                                           /* n_preallocs */
+            (GInstanceInitFunc) eel_canvas_rect_init     /* instance_init */
         };
 
         rect_type = g_type_register_static (eel_canvas_re_get_type (),
@@ -521,24 +607,23 @@ eel_canvas_rect_get_type (void)
 }
 
 static void
-eel_canvas_rect_class_init (EelCanvasRectClass *klass)
+eel_canvas_rect_class_init (EelCanvasRectClass *klass,
+                            void               *klass_data)
 {
-    EelCanvasItemClass *item_class;
-
     rect_parent_class = g_type_class_peek_parent (klass);
 
-    item_class = (EelCanvasItemClass *) klass;
+    EelCanvasItemClass *item_class = (EelCanvasItemClass *) klass;
 
     item_class->draw = eel_canvas_rect_draw;
     item_class->point = eel_canvas_rect_point;
     item_class->update = eel_canvas_rect_update;
 
     G_OBJECT_CLASS (klass)->finalize = eel_canvas_rect_finalize;
-
 }
 
 static void
-eel_canvas_rect_init (EelCanvasRect *rect)
+eel_canvas_rect_init (EelCanvasRect *rect,
+                      void          *rect_data)
 {
     rect->priv = g_new0 (EelCanvasRectPrivate, 1);
 }
@@ -568,12 +653,11 @@ eel_canvas_set_source_color (cairo_t *cr,
 static void
 eel_canvas_rect_draw (EelCanvasItem *item, cairo_t *cr, cairo_region_t *region)
 {
-    EelCanvasRE *re;
     double x1, y1, x2, y2;
     int cx1, cy1, cx2, cy2;
     double i2w_dx, i2w_dy;
 
-    re = EEL_CANVAS_RE (item);
+    EelCanvasRE *re = EEL_CANVAS_RE (item);
 
     /* Get canvas pixel coordinates */
     i2w_dx = 0.0;
@@ -632,7 +716,6 @@ eel_canvas_rect_draw (EelCanvasItem *item, cairo_t *cr, cairo_region_t *region)
 static double
 eel_canvas_rect_point (EelCanvasItem *item, double x, double y, int cx, int cy, EelCanvasItem **actual_item)
 {
-    EelCanvasRE *re;
     double x1, y1, x2, y2;
     double hwidth;
     double dx, dy;
@@ -641,7 +724,8 @@ eel_canvas_rect_point (EelCanvasItem *item, double x, double y, int cx, int cy, 
 #ifdef VERBOSE
     g_print ("eel_canvas_rect_point\n");
 #endif
-    re = EEL_CANVAS_RE (item);
+
+    EelCanvasRE *re = EEL_CANVAS_RE (item);
 
     *actual_item = item;
 
@@ -737,19 +821,17 @@ request_redraw_borders (EelCanvas *canvas,
 static void
 eel_canvas_rect_update (EelCanvasItem *item, double i2w_dx, double i2w_dy, gint flags)
 {
-    EelCanvasRE *re;
     double x1, y1, x2, y2;
     int cx1, cy1, cx2, cy2;
     int repaint_rects_count, i;
     int width_pixels;
     int width_lt, width_rb;
     Rect update_rect, repaint_rects[4];
-    EelCanvasRectPrivate *priv;
 
     eel_canvas_re_update_shared (item, i2w_dx, i2w_dy, flags);
 
-    re = EEL_CANVAS_RE (item);
-    priv = EEL_CANVAS_RECT (item)->priv;
+    EelCanvasRE *re = EEL_CANVAS_RE (item);
+    EelCanvasRectPrivate *priv = EEL_CANVAS_RECT (item)->priv;
 
     x1 = re->x1 + i2w_dx;
     y1 = re->y1 + i2w_dy;

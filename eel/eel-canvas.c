@@ -75,12 +75,12 @@
 
 #include "eel-marshal.h"
 
-static void eel_canvas_request_update (EelCanvas      *canvas);
+static void eel_canvas_request_update   (EelCanvas      *canvas);
+static void redraw_and_repick_if_mapped (EelCanvasItem  *item);
 static void group_add                   (EelCanvasGroup *group,
-        EelCanvasItem  *item);
+                                         EelCanvasItem  *item);
 static void group_remove                (EelCanvasGroup *group,
-        EelCanvasItem  *item);
-static void redraw_and_repick_if_mapped (EelCanvasItem *item);
+                                         EelCanvasItem  *item);
 
 /*** EelCanvasItem ***/
 
@@ -102,9 +102,12 @@ enum
     ITEM_LAST_SIGNAL
 };
 
-static void eel_canvas_item_class_init     (EelCanvasItemClass *klass);
-static void eel_canvas_item_init           (EelCanvasItem      *item);
-static int  emit_event                       (EelCanvas *canvas, GdkEvent *event);
+static void eel_canvas_item_class_init (EelCanvasItemClass *klass,
+                                        void               *klass_data);
+static void eel_canvas_item_init       (EelCanvasItem      *item,
+                                        void               *item_data);
+static int  emit_event                 (EelCanvas          *canvas,
+                                        GdkEvent           *event);
 
 static guint item_signals[ITEM_LAST_SIGNAL] = { 0 };
 
@@ -132,14 +135,14 @@ eel_canvas_item_get_type (void)
         static const GTypeInfo canvas_item_info =
         {
             sizeof (EelCanvasItemClass),
-            (GBaseInitFunc) NULL,
-            (GBaseFinalizeFunc) NULL,
-            (GClassInitFunc) eel_canvas_item_class_init,
-            NULL,           /* class_finalize */
-            NULL,           /* class_data */
+            NULL,                                        /* base_init */
+            NULL,                                        /* base_finalize */
+            (GClassInitFunc) eel_canvas_item_class_init, /* class_init */
+            NULL,                                        /* class_finalize */
+            NULL,                                        /* class_data */
             sizeof (EelCanvasItem),
-            0,              /* n_preallocs */
-            (GInstanceInitFunc) eel_canvas_item_init
+            0,                                           /* n_preallocs */
+            (GInstanceInitFunc) eel_canvas_item_init     /* instance_init */
         };
 
         canvas_item_type = g_type_register_static (G_TYPE_INITIALLY_UNOWNED,
@@ -153,7 +156,8 @@ eel_canvas_item_get_type (void)
 
 /* Object initialization function for EelCanvasItem */
 static void
-eel_canvas_item_init (EelCanvasItem *item)
+eel_canvas_item_init (EelCanvasItem *item,
+                      void          *item_data)
 {
     item->flags |= EEL_CANVAS_ITEM_VISIBLE;
 }
@@ -178,13 +182,12 @@ eel_canvas_item_init (EelCanvasItem *item)
 EelCanvasItem *
 eel_canvas_item_new (EelCanvasGroup *parent, GType type, const gchar *first_arg_name, ...)
 {
-    EelCanvasItem *item;
     va_list args;
 
     g_return_val_if_fail (EEL_IS_CANVAS_GROUP (parent), NULL);
     g_return_val_if_fail (g_type_is_a (type, eel_canvas_item_get_type ()), NULL);
 
-    item = EEL_CANVAS_ITEM (g_object_new (type, NULL));
+    EelCanvasItem *item = EEL_CANVAS_ITEM (g_object_new (type, NULL));
 
     va_start (args, first_arg_name);
     eel_canvas_item_construct (item, parent, first_arg_name, args);
@@ -210,11 +213,9 @@ static void
 eel_canvas_item_set_property (GObject *gobject, guint param_id,
                               const GValue *value, GParamSpec *pspec)
 {
-    EelCanvasItem *item;
-
     g_return_if_fail (EEL_IS_CANVAS_ITEM (gobject));
 
-    item = EEL_CANVAS_ITEM (gobject);
+    EelCanvasItem *item = EEL_CANVAS_ITEM (gobject);
 
     switch (param_id)
     {
@@ -252,11 +253,9 @@ static void
 eel_canvas_item_get_property (GObject *gobject, guint param_id,
                               GValue *value, GParamSpec *pspec)
 {
-    EelCanvasItem *item;
-
     g_return_if_fail (EEL_IS_CANVAS_ITEM (gobject));
 
-    item = EEL_CANVAS_ITEM (gobject);
+    EelCanvasItem *item = EEL_CANVAS_ITEM (gobject);
 
     switch (param_id)
     {
@@ -308,11 +307,9 @@ redraw_and_repick_if_mapped (EelCanvasItem *item)
 static void
 eel_canvas_item_dispose (GObject *object)
 {
-    EelCanvasItem *item;
-
     g_return_if_fail (EEL_IS_CANVAS_ITEM (object));
 
-    item = EEL_CANVAS_ITEM (object);
+    EelCanvasItem *item = EEL_CANVAS_ITEM (object);
 
     if (item->canvas)
     {
@@ -433,9 +430,7 @@ eel_canvas_item_invoke_update (EelCanvasItem *item,
                                double i2w_dy,
                                int flags)
 {
-    int child_flags;
-
-    child_flags = flags;
+    int child_flags = flags;
 
     /* apply object flags to child flags */
     child_flags &= ~EEL_CANVAS_UPDATE_REQUESTED;
@@ -566,12 +561,10 @@ eel_canvas_queue_resize (EelCanvas *canvas)
 static gboolean
 put_item_after (GList *link, GList *before)
 {
-    EelCanvasGroup *parent;
-
     if (link == before)
         return FALSE;
 
-    parent = EEL_CANVAS_GROUP (EEL_CANVAS_ITEM (link->data)->parent);
+    EelCanvasGroup *parent = EEL_CANVAS_GROUP (EEL_CANVAS_ITEM (link->data)->parent);
 
     if (before == NULL)
     {
@@ -633,7 +626,6 @@ void
 eel_canvas_item_raise (EelCanvasItem *item, int positions)
 {
     GList *link, *before;
-    EelCanvasGroup *parent;
 
     g_return_if_fail (EEL_IS_CANVAS_ITEM (item));
     g_return_if_fail (positions >= 0);
@@ -641,7 +633,7 @@ eel_canvas_item_raise (EelCanvasItem *item, int positions)
     if (!item->parent || positions == 0)
         return;
 
-    parent = EEL_CANVAS_GROUP (item->parent);
+    EelCanvasGroup *parent = EEL_CANVAS_GROUP (item->parent);
     link = g_list_find (parent->item_list, item);
     g_assert (link != NULL);
 
@@ -671,7 +663,6 @@ void
 eel_canvas_item_lower (EelCanvasItem *item, int positions)
 {
     GList *link, *before;
-    EelCanvasGroup *parent;
 
     g_return_if_fail (EEL_IS_CANVAS_ITEM (item));
     g_return_if_fail (positions >= 1);
@@ -679,7 +670,7 @@ eel_canvas_item_lower (EelCanvasItem *item, int positions)
     if (!item->parent || positions == 0)
         return;
 
-    parent = EEL_CANVAS_GROUP (item->parent);
+    EelCanvasGroup *parent = EEL_CANVAS_GROUP (item->parent);
     link = g_list_find (parent->item_list, item);
     g_assert (link != NULL);
 
@@ -706,14 +697,13 @@ void
 eel_canvas_item_raise_to_top (EelCanvasItem *item)
 {
     GList *link;
-    EelCanvasGroup *parent;
 
     g_return_if_fail (EEL_IS_CANVAS_ITEM (item));
 
     if (!item->parent)
         return;
 
-    parent = EEL_CANVAS_GROUP (item->parent);
+    EelCanvasGroup *parent = EEL_CANVAS_GROUP (item->parent);
     link = g_list_find (parent->item_list, item);
     g_assert (link != NULL);
 
@@ -734,14 +724,13 @@ void
 eel_canvas_item_lower_to_bottom (EelCanvasItem *item)
 {
     GList *link;
-    EelCanvasGroup *parent;
 
     g_return_if_fail (EEL_IS_CANVAS_ITEM (item));
 
     if (!item->parent)
         return;
 
-    parent = EEL_CANVAS_GROUP (item->parent);
+    EelCanvasGroup *parent = EEL_CANVAS_GROUP (item->parent);
     link = g_list_find (parent->item_list, item);
     g_assert (link != NULL);
 
@@ -1216,8 +1205,10 @@ enum
 };
 
 
-static void eel_canvas_group_class_init  (EelCanvasGroupClass *klass);
-static void eel_canvas_group_init        (EelCanvasGroup      *group);
+static void eel_canvas_group_class_init  (EelCanvasGroupClass   *klass,
+                                          void                  *klass_data);
+static void eel_canvas_group_init        (EelCanvasGroup        *group,
+                                          void                  *group_data);
 static void eel_canvas_group_set_property(GObject               *object,
         guint                  param_id,
         const GValue          *value,
@@ -1268,14 +1259,14 @@ eel_canvas_group_get_type (void)
         static const GTypeInfo group_info =
         {
             sizeof (EelCanvasGroupClass),
-            (GBaseInitFunc) NULL,
-            (GBaseFinalizeFunc) NULL,
-            (GClassInitFunc) eel_canvas_group_class_init,
-            NULL,           /* class_finalize */
-            NULL,           /* class_data */
+            NULL,                                         /* base_init */
+            NULL,                                         /* base_finalize */
+            (GClassInitFunc) eel_canvas_group_class_init, /* class_init */
+            NULL,                                         /* class_finalize */
+            NULL,                                         /* class_data */
             sizeof (EelCanvasGroup),
-            0,              /* n_preallocs */
-            (GInstanceInitFunc) eel_canvas_group_init
+            0,                                            /* n_preallocs */
+            (GInstanceInitFunc) eel_canvas_group_init     /* instance_init */
 
 
         };
@@ -1291,13 +1282,11 @@ eel_canvas_group_get_type (void)
 
 /* Class initialization function for EelCanvasGroupClass */
 static void
-eel_canvas_group_class_init (EelCanvasGroupClass *klass)
+eel_canvas_group_class_init (EelCanvasGroupClass *klass,
+                             void                *klass_data)
 {
-    GObjectClass *gobject_class;
-    EelCanvasItemClass *item_class;
-
-    gobject_class = (GObjectClass *) klass;
-    item_class = (EelCanvasItemClass *) klass;
+    GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+    EelCanvasItemClass *item_class = EEL_CANVAS_ITEM_CLASS (klass);
 
     group_parent_class = g_type_class_peek_parent (klass);
 
@@ -1305,19 +1294,36 @@ eel_canvas_group_class_init (EelCanvasGroupClass *klass)
     gobject_class->get_property = eel_canvas_group_get_property;
 
     g_object_class_install_property
-    (gobject_class, GROUP_PROP_X,
-     g_param_spec_double ("x",
-                          _("X"),
-                          _("X"),
-                          -G_MAXDOUBLE, G_MAXDOUBLE, 0.0,
-                          G_PARAM_READWRITE));
+    (
+        gobject_class,
+        GROUP_PROP_X,         /* property id */
+        g_param_spec_double   /* property type */
+        (
+            "x",              /* property name */
+            NULL,             /* nickname */
+            NULL,             /* description */
+            -G_MAXDOUBLE,     /* minimum */
+            G_MAXDOUBLE,      /* maximum */
+            0.0,              /* default */
+            G_PARAM_READWRITE /* GParamSpecFlags */
+        )
+    );
+
     g_object_class_install_property
-    (gobject_class, GROUP_PROP_Y,
-     g_param_spec_double ("y",
-                          _("Y"),
-                          _("Y"),
-                          -G_MAXDOUBLE, G_MAXDOUBLE, 0.0,
-                          G_PARAM_READWRITE));
+    (
+        gobject_class,
+        GROUP_PROP_Y,         /* property id */
+        g_param_spec_double   /* property type */
+        (
+            "y",              /* property name */
+            NULL,             /* nickname */
+            NULL,             /* description */
+            -G_MAXDOUBLE,     /* minimum */
+            G_MAXDOUBLE,      /* maximum */
+            0.0,              /* default */
+            G_PARAM_READWRITE /* GParamSpecFlags */
+        )
+    );
 
     item_class->destroy = eel_canvas_group_destroy;
     item_class->update = eel_canvas_group_update;
@@ -1332,7 +1338,8 @@ eel_canvas_group_class_init (EelCanvasGroupClass *klass)
 
 /* Object initialization function for EelCanvasGroup */
 static void
-eel_canvas_group_init (EelCanvasGroup *group)
+eel_canvas_group_init (EelCanvasGroup *group,
+                       void           *group_data)
 {
     group->xpos = 0.0;
     group->ypos = 0.0;
@@ -1817,28 +1824,30 @@ enum
     LAST_SIGNAL
 };
 
-static void eel_canvas_class_init          (EelCanvasClass *klass);
-static void eel_canvas_init                (EelCanvas      *canvas);
-static void eel_canvas_destroy             (GtkWidget        *object);
-static void eel_canvas_map                 (GtkWidget        *widget);
-static void eel_canvas_unmap               (GtkWidget        *widget);
-static void eel_canvas_realize             (GtkWidget        *widget);
-static void eel_canvas_unrealize           (GtkWidget        *widget);
-static void eel_canvas_size_allocate       (GtkWidget        *widget,
+static void eel_canvas_class_init          (EelCanvasClass *klass,
+                                            void           *klass_data);
+static void eel_canvas_init                (EelCanvas      *canvas,
+                                            void           *canvas_data);
+static void eel_canvas_destroy             (GtkWidget      *object);
+static void eel_canvas_map                 (GtkWidget      *widget);
+static void eel_canvas_unmap               (GtkWidget      *widget);
+static void eel_canvas_realize             (GtkWidget      *widget);
+static void eel_canvas_unrealize           (GtkWidget      *widget);
+static void eel_canvas_size_allocate       (GtkWidget      *widget,
         GtkAllocation    *allocation);
-static gint eel_canvas_button              (GtkWidget        *widget,
+static gint eel_canvas_button              (GtkWidget      *widget,
         GdkEventButton   *event);
-static gint eel_canvas_motion              (GtkWidget        *widget,
+static gint eel_canvas_motion              (GtkWidget      *widget,
         GdkEventMotion   *event);
-static gint eel_canvas_draw                (GtkWidget        *widget,
-                                            cairo_t          *cr);
-static gint eel_canvas_key                 (GtkWidget        *widget,
+static gint eel_canvas_draw                (GtkWidget      *widget,
+                                            cairo_t        *cr);
+static gint eel_canvas_key                 (GtkWidget      *widget,
         GdkEventKey      *event);
-static gint eel_canvas_crossing            (GtkWidget        *widget,
+static gint eel_canvas_crossing            (GtkWidget      *widget,
         GdkEventCrossing *event);
-static gint eel_canvas_focus_in            (GtkWidget        *widget,
+static gint eel_canvas_focus_in            (GtkWidget      *widget,
         GdkEventFocus    *event);
-static gint eel_canvas_focus_out           (GtkWidget        *widget,
+static gint eel_canvas_focus_out           (GtkWidget      *widget,
         GdkEventFocus    *event);
 static void eel_canvas_request_update_real (EelCanvas      *canvas);
 static void eel_canvas_draw_background     (EelCanvas      *canvas,
@@ -1866,14 +1875,14 @@ eel_canvas_get_type (void)
         static const GTypeInfo canvas_info =
         {
             sizeof (EelCanvasClass),
-            (GBaseInitFunc) NULL,
-            (GBaseFinalizeFunc) NULL,
-            (GClassInitFunc) eel_canvas_class_init,
-            NULL,           /* class_finalize */
-            NULL,           /* class_data */
+            NULL,                                   /* base_init */
+            NULL,                                   /* base_finalize */
+            (GClassInitFunc) eel_canvas_class_init, /* class_init */
+            NULL,                                   /* class_finalize */
+            NULL,                                   /* class_data */
             sizeof (EelCanvas),
-            0,              /* n_preallocs */
-            (GInstanceInitFunc) eel_canvas_init
+            0,                                      /* n_preallocs */
+            (GInstanceInitFunc) eel_canvas_init     /* instance_init */
         };
 
         canvas_type = g_type_register_static (gtk_layout_get_type (),
@@ -2026,13 +2035,11 @@ eel_canvas_accessible_init (EelCanvasAccessible *accessible)
 
 /* Class initialization function for EelCanvasClass */
 static void
-eel_canvas_class_init (EelCanvasClass *klass)
+eel_canvas_class_init (EelCanvasClass *klass,
+                       void           *klass_data)
 {
-    GObjectClass   *gobject_class;
-    GtkWidgetClass *widget_class;
-
-    gobject_class = (GObjectClass *)klass;
-    widget_class  = (GtkWidgetClass *) klass;
+    GObjectClass   *gobject_class = G_OBJECT_CLASS   (klass);
+    GtkWidgetClass *widget_class  = GTK_WIDGET_CLASS (klass);
 
     canvas_parent_class = g_type_class_peek_parent (klass);
 
@@ -2083,7 +2090,8 @@ panic_root_destroyed (GtkWidget *object, gpointer data)
 
 /* Object initialization function for EelCanvas */
 static void
-eel_canvas_init (EelCanvas *canvas)
+eel_canvas_init (EelCanvas *canvas,
+                 void      *canvas_data)
 {
     guint width, height;
     gtk_widget_set_can_focus (GTK_WIDGET (canvas), TRUE);
@@ -3941,20 +3949,16 @@ eel_canvas_item_accessible_init (EelCanvasItemAccessible *accessible)
 static AtkObject *
 eel_canvas_item_accessible_create (GObject *for_object)
 {
-    GType type;
-    AtkObject *accessible;
-    EelCanvasItem *item;
-
-    item = EEL_CANVAS_ITEM (for_object);
+    EelCanvasItem *item = EEL_CANVAS_ITEM (for_object);
     g_return_val_if_fail (item != NULL, NULL);
 
-    type = eel_canvas_item_accessible_get_type ();
+    GType type = eel_canvas_item_accessible_get_type ();
     if (type == G_TYPE_INVALID)
     {
         return atk_no_op_object_new (for_object);
     }
 
-    accessible = g_object_new (type, NULL);
+    AtkObject *accessible = g_object_new (type, NULL);
     atk_object_initialize (accessible, for_object);
     return accessible;
 }
@@ -3968,11 +3972,9 @@ eel_canvas_item_accessible_factory_get_accessible_type (void)
 static AtkObject*
 eel_canvas_item_accessible_factory_create_accessible (GObject *obj)
 {
-    AtkObject *accessible;
-
     g_return_val_if_fail (G_IS_OBJECT (obj), NULL);
 
-    accessible = eel_canvas_item_accessible_create (obj);
+    AtkObject *accessible = eel_canvas_item_accessible_create (obj);
 
     return accessible;
 }
@@ -3998,9 +4000,10 @@ eel_canvas_item_accessible_factory_init (EelCanvasItemAccessibleFactory *accessi
 
 /* Class initialization function for EelCanvasItemClass */
 static void
-eel_canvas_item_class_init (EelCanvasItemClass *klass)
+eel_canvas_item_class_init (EelCanvasItemClass *klass,
+                            void               *klass_data)
 {
-    GObjectClass *gobject_class = (GObjectClass *) klass;
+    GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
     item_parent_class = g_type_class_peek_parent (klass);
 
@@ -4009,16 +4012,32 @@ eel_canvas_item_class_init (EelCanvasItemClass *klass)
     gobject_class->dispose = eel_canvas_item_dispose;
 
     g_object_class_install_property
-    (gobject_class, ITEM_PROP_PARENT,
-     g_param_spec_object ("parent", NULL, NULL,
-                          EEL_TYPE_CANVAS_ITEM,
-                          G_PARAM_READWRITE));
+    (
+        gobject_class,
+        ITEM_PROP_PARENT,         /* property id */
+        g_param_spec_object       /* property type */
+        (
+            "parent",             /* property name */
+            NULL,                 /* nickname */
+            NULL,                 /* description */
+            EEL_TYPE_CANVAS_ITEM, /* object type */
+            G_PARAM_READWRITE     /* GParamSpecFlags */
+        )
+    );
 
     g_object_class_install_property
-    (gobject_class, ITEM_PROP_VISIBLE,
-     g_param_spec_boolean ("visible", NULL, NULL,
-                           TRUE,
-                           G_PARAM_READWRITE));
+    (
+        gobject_class,
+        ITEM_PROP_VISIBLE,        /* property id */
+        g_param_spec_boolean      /* property type */
+        (
+            "visible",            /* property name */
+            NULL,                 /* nickname */
+            NULL,                 /* description */
+            TRUE,                 /* default */
+            G_PARAM_READWRITE     /* GParamSpecFlags */
+        )
+    );
 
     item_signals[ITEM_EVENT] =
         g_signal_new ("event",

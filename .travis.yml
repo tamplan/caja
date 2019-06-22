@@ -182,6 +182,7 @@ build_scripts:
   -     bash ./fedora.sh
   - fi
   - ./autogen.sh
+  - sed -i 's/$(POFILES) $(GMOFILES) \\/$(POFILES) \\/' po/Makefile.in.in
   - scan-build $CHECKERS ./configure
   - if [ $CPU_COUNT -gt 1 ]; then
   -     scan-build $CHECKERS --keep-cc -o html-report make -j $CPU_COUNT
@@ -199,6 +200,7 @@ after_scripts:
   -   ./gen-index -l 20 -i https://github.com/${OWNER_NAME}/mate-icon-theme/raw/master/mate/16x16/apps/system-file-manager.png
   - fi
   - make distcheck
+  - tar tf caja-*.tar.xz |grep po
 
 releases:
   draft: false
